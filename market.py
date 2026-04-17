@@ -1,60 +1,84 @@
 import streamlit as st
-import time
 import pandas as pd
+import time
 from datetime import datetime
 
-st.set_page_config(page_title="AgriLoop QC", layout="wide")
+# Cấu hình trang chuyên nghiệp
+st.set_page_config(page_title="AgriLoop QC System", layout="wide", page_icon="🌱")
 
-st.title("🛡️ AgriLoop Quality Control Dashboard")
-st.subheader("Hệ thống kiểm định và số hóa phụ phẩm nông nghiệp")
+# Tùy chỉnh CSS để nhìn hiện đại hơn
+st.markdown("""
+    <style>
+    .main { background-color: #f5f7f9; }
+    .stButton>button { width: 100%; border-radius: 5px; height: 3em; background-color: #2E7D32; color: white; }
+    .status-box { padding: 20px; border-radius: 10px; border: 1px solid #e0e0e0; background-color: white; }
+    </style>
+    """, unsafe_allow_html=True)
 
-# Khởi tạo hoặc đọc file nhật ký kiểm định
-log_file = "qc_history.txt"
+st.title("🌱 AgriLoop: Hệ thống Kiểm định & Truy xuất Nguồn gốc")
+st.markdown("---")
 
-col1, col2, col3 = st.columns(3)
+# Khởi tạo Database giả lập trong Session State
+if 'data_log' not in st.session_state:
+    st.session_state.data_log = pd.DataFrame(columns=['Thời gian', 'Loại phụ phẩm', 'Độ ẩm (%)', 'Tạp chất (%)', 'Trạng thái'])
 
-# Bước 1: AI Grading
+# Giao diện chính chia làm 3 cột quy trình
+col1, col2, col3 = st.columns(3, gap="large")
+
+# --- BƯỚC 1: PHÂN LOẠI AI ---
 with col1:
-    st.info("### Bước 1: Source Grading")
-    if st.button("🔍 Quét AI tại nguồn"):
-        with st.spinner('Đang phân tích hình ảnh...'):
-            time.sleep(1.5)
-            st.session_state['grade'] = "Loại A"
-            st.success("Độ sạch: 95% - Loại A")
+    st.subheader("1️⃣ Phân loại Nguồn (AI)")
+    with st.container():
+        source_type = st.selectbox("Chọn loại phụ phẩm:", ["Rơm rạ", "Vỏ trấu", "Bã mía", "Vỏ cà phê"])
+        if st.button("🚀 Kích hoạt AI Vision"):
+            with st.status("Đang phân tích hình ảnh...", expanded=True) as status:
+                time.sleep(1.5)
+                st.write("Đang nhận diện thành phần...")
+                time.sleep(1)
+                status.update(label="Phân tích hoàn tất!", state="complete", expanded=False)
+            st.session_state['step1_done'] = True
+            st.success(f"Nhận diện: {source_type} - Độ thuần 98%")
 
-# Bước 2: Lab Verification
+# --- BƯỚC 2: KIỂM ĐỊNH LÝ HÓA ---
 with col2:
-    st.warning("### Bước 2: Lab Verification")
-    moisture = st.slider("Đo độ ẩm (%)", 0, 100, 15)
-    st.session_state['moisture'] = moisture
-    if moisture <= 20:
-        st.success("✅ Đạt chuẩn lưu kho")
+    st.subheader("2️⃣ Chỉ số Lý - Hóa")
+    moisture = st.slider("Chỉ số độ ẩm (%)", 0, 100, 15)
+    impurities = st.slider("Tỉ lệ tạp chất (%)", 0, 10, 2)
+    
+    # Logic kiểm định của AgriLoop
+    is_qualified = moisture <= 20 and impurities <= 5
+    
+    if is_qualified:
+        st.info("✅ Chỉ số đạt ngưỡng tối ưu cho chế biến.")
     else:
-        st.error("❌ Cảnh báo: Độ ẩm quá cao!")
+        st.error("⚠️ Chỉ số vượt ngưỡng! Cần xử lý nhiệt lại.")
 
-# Bước 3: Digital Passport & Logging
+# --- BƯỚC 3: SỐ HÓA & TRUY XUẤT ---
 with col3:
-    st.success("### Bước 3: Digital Passport")
-    if st.button("🎟️ Xuất QR & Lưu hệ thống"):
-        # Tạo dòng log
-        now = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-        status = "PASS" if st.session_state.get('moisture', 100) <= 20 else "FAIL"
-        log_entry = f"{now} | Grade: {st.session_state.get('grade', 'N/A')} | Moisture: {st.session_state.get('moisture', 'N/A')}% | Status: {status}\n"
+    st.subheader("3️⃣ Digital Passport")
+    if st.button("📝 Chốt đơn & Cấp mã QR"):
+        new_data = {
+            'Thời gian': datetime.now().strftime("%H:%M:%S"),
+            'Loại phụ phẩm': source_type,
+            'Độ ẩm (%)': moisture,
+            'Tạp chất (%)': impurities,
+            'Trạng thái': "ĐẠT CHUẨN" if is_qualified else "REJECT"
+        }
+        # Cập nhật vào bảng dữ liệu
+        st.session_state.data_log = pd.concat([pd.DataFrame([new_data]), st.session_state.data_log], ignore_index=True)
         
-        # Ghi vào file .txt
-        with open(log_file, "a", encoding="utf-8") as f:
-            f.write(log_entry)
-            
-        st.image("https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=" + log_entry)
-        st.write("**Đã lưu vào nhật ký hệ thống!**")
+        # Hiển thị QR Code giả lập
+        st.image(f"https://api.qrserver.com/v1/create-qr-code/?size=150x150&data={new_data}", caption="Quét để truy xuất ESG")
+        st.balloons()
 
-st.divider()
-# Hiển thị lịch sử từ file .txt để "flex" với giám khảo
-st.write("### 📜 Nhật ký kiểm định (Dữ liệu thực thời gian thực)")
-try:
-    with open(log_file, "r", encoding="utf-8") as f:
-        history = f.readlines()
-        for line in history[-5:]: # Hiện 5 dòng gần nhất
-            st.text(line.strip())
-except FileNotFoundError:
-    st.write("Chưa có dữ liệu kiểm định nào.")
+st.markdown("---")
+
+# --- PHẦN QUẢN TRỊ DỮ LIỆU CHO DÂN MIS ---
+st.subheader("📊 Bảng điều khiển Quản trị (Dành cho Doanh nghiệp thu mua)")
+m1, m2, m3 = st.columns(3)
+m1.metric("Tổng lô hàng đã quét", len(st.session_state.data_log))
+m2.metric("Tỉ lệ đạt chuẩn", f"{len(st.session_state.data_log[st.session_state.data_log['Trạng thái'] == 'ĐẠT CHUẨN'])} đơn")
+m3.metric("Lượng phát thải giảm (Dự tính)", f"{len(st.session_state.data_log)*5} kg CO2")
+
+st.write("### Nhật ký hệ thống thời gian thực")
+st.dataframe(st.session_state.data_log, use_container_width=True)
